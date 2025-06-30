@@ -16,7 +16,7 @@ import {
 } from "./mod.ts";
 
 function getRawAgeField(): Result<string, string> {
-  return ok("21");
+  return err("21");
 }
 
 function parseAge(raw: string): Result<number, string> {
