@@ -2,43 +2,111 @@ import {
   andThen,
   combine,
   err,
+  expect,
   fromThrowable,
+  isOk,
   map,
   mapErr,
   match,
   ok,
   Result,
+  unwrap,
   unwrapOr,
+  unwrapOrElse,
 } from "./mod.ts";
 
-const r1: Result<number, string> = ok(42);
-const r2: Result<number, string> = err("oops");
+function getRawAgeField(): Result<string, string> {
+  return ok("21");
+}
 
-const r3 = map(ok(1), (x) => x * 10);
-const r4 = map(err("fail"), (x) => x * 10);
+function parseAge(raw: string): Result<number, string> {
+  const n = Number(raw);
+  return Number.isNaN(n) ? err("not a number") : ok(n);
+}
 
-const r5 = mapErr(err("fail"), (msg) => `error: ${msg}`);
+function validateAdult(age: number): Result<number, string> {
+  return age >= 18 ? ok(age) : err("too young");
+}
 
-const r6 = andThen(ok(5), (x) => ok(x + 1));
-const r7 = andThen(err("fail"), (x) => ok(x + 1));
+const ageResult: Result<number, string> = andThen(
+  andThen(getRawAgeField(), parseAge),
+  validateAdult,
+);
 
-const v1: number = unwrapOr(ok(10), 0);
-const v2: number = unwrapOr(err("oops"), 0);
-
-const m1 = match(ok("yes"), {
-  ok: (v) => `value: ${v}`,
-  err: (e) => `error: ${e}`,
+const ageMessage = match(ageResult, {
+  ok: (age) => `Access granted to user age ${age}`,
+  err: (error) => `Access denied: ${error}`,
 });
-const m2 = match(err("no"), {
-  ok: (v) => `value: ${v}`,
-  err: (e) => `error: ${e}`,
+console.log("Age validation:", ageMessage);
+
+if (isOk(ageResult)) {
+  const confirmedAge: number = unwrap(ageResult);
+  console.log("Confirmed age (unwrap):", confirmedAge);
+
+  const doubledResult = map(ageResult, (age) => age * 2);
+  console.log(
+    "Double age (via map):",
+    match(doubledResult, {
+      ok: (val) => val,
+      err: (e) => e,
+    }),
+  );
+}
+
+console.log("Age or fallback (unwrapOr):", unwrapOr(ageResult, 0));
+
+const ageWithFallback = unwrapOrElse(ageResult, (error) => {
+  console.warn("Error encountered:", error);
+  return 18;
 });
+console.log("Age or fallback (unwrapOrElse):", ageWithFallback);
 
-const rc1 = combine([ok(1), ok(2), ok(3)]);
-const rc2 = combine([ok(1), err("bad"), ok(3)]);
+try {
+  const expectedAge = expect(ageResult, "User age not valid");
+  console.log("Expect returned:", expectedAge);
+} catch (e) {
+  console.error("Error from expect:", e);
+}
 
-const safe = fromThrowable((x: number): number => JSON.parse('{"x":1}'));
-const fail = fromThrowable(
-  () => JSON.parse("{...}"),
-  (e) => `parse fail: ${e}`,
+const safeParse = fromThrowable(
+  (input: string) => JSON.parse(input),
+  (e): string => `Parse error: ${e}`,
+);
+
+const parsed = safeParse('{"a": 1}');
+console.log(
+  "Parsed JSON (ok):",
+  match(parsed, {
+    ok: (val) => val,
+    err: (err) => `Error: ${err}`,
+  }),
+);
+
+const faultyParsed = safeParse("invalid json");
+console.log(
+  "Parsed JSON (error):",
+  match(faultyParsed, {
+    ok: (val) => val,
+    err: (err) => `Error: ${err}`,
+  }),
+);
+
+const list1 = [ok(1), ok(2), ok(3)];
+const combined1 = combine(list1);
+console.log(
+  "Combined Ok list:",
+  match(combined1, {
+    ok: (values) => `Values: ${values.join(", ")}`,
+    err: (err) => `Error: ${err}`,
+  }),
+);
+
+const list2 = [ok(1), err("error in second"), ok(3)];
+const combined2 = combine(list2);
+console.log(
+  "Combined list with error:",
+  match(combined2, {
+    ok: (values) => `Values: ${values.join(", ")}`,
+    err: (err) => `Error: ${err}`,
+  }),
 );
